@@ -1,83 +1,66 @@
 <!doctype html>
 <html lang="zh-CN">
-<head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>登录 / 注册</title>
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>登录</title>
 <style>
   body{font-family:Arial;background:linear-gradient(180deg,#071026,#001021);color:#e6eef6;margin:0;padding:30px}
   .wrap{max-width:640px;margin:0 auto}
   .card{background:rgba(255,255,255,0.02);padding:20px;border-radius:12px}
   input{width:100%;padding:10px;margin-bottom:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
-  .btn{background:#06b6d4;color:#022;padding:10px 14px;border-radius:8px;border:none;cursor:pointer}
-  .muted{background:transparent;border:1px solid rgba(255,255,255,0.04);padding:8px;border-radius:8px;color:#9ca3af}
+  .btn{background:#06b6d4;color:#022;padding:10px 14px;border-radius:8px;border:none;cursor:pointer;transition:transform .12s}
+  .btn:active{transform:scale(.98)}
+  .muted{background:transparent;border:1px solid rgba(255,255,255,0.04);padding:8px;border-radius:8px;color:#9ca3af;cursor:pointer}
+  .row{display:flex;gap:8px;align-items:center}
+  a.link{color:#9ca3af;text-decoration:none;margin-left:8px}
 </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <h2>登录 / 注册</h2>
+      <h2>登录</h2>
+      <div id="methodNote" class="small">选择登录方式</div>
 
-      <h4>邮箱 + 验证码</h4>
-      <input id="emailForOtp" placeholder="邮箱" />
-      <div style="display:flex;gap:8px">
-        <button id="sendOtpBtn" class="btn">发送验证码</button>
-        <a href="/verify.html" class="muted" style="display:inline-flex;align-items:center;padding:8px 10px;text-decoration:none">我已收到验证码 → 验证</a>
-      </div>
-      <p id="otpHint" style="color:#9ca3af;font-size:13px"></p>
-
-      <hr style="opacity:0.08"/>
-
-      <h4>邮箱 + 密码登录</h4>
-      <input id="emailLogin" placeholder="邮箱 (用于密码登录)" />
-      <input id="pwdLogin" type="password" placeholder="密码" />
-      <div style="display:flex;gap:8px">
-        <button id="pwdLoginBtn" class="btn">用密码登录</button>
-        <button id="setPwdBtn" class="muted">设置/修改密码</button>
-      </div>
-      <p style="margin-top:8px;color:#9ca3af;font-size:13px">游客模式：</p>
-      <div style="display:flex;gap:8px">
-        <button id="guestBtn" class="muted">游客模式（每天限 5 条）</button>
+      <div id="pwdForm">
+        <input id="emailLogin" placeholder="邮箱" />
+        <input id="pwdLogin" type="password" placeholder="密码" />
+        <div class="row" style="margin-top:8px">
+          <button id="pwdLoginBtn" class="btn">密码登录</button>
+          <a href="/register.html" class="link">去注册</a>
+          <div style="flex:1"></div>
+          <a id="chooseOtp" class="link" href="#">选择验证码登录</a>
+        </div>
       </div>
 
-      <hr style="opacity:0.08"/>
-
-      <p style="margin-top:12px;color:#9ca3af">登录后你可以绑定 QQ 来显示头像与昵称。</p>
+      <div id="otpForm" style="display:none">
+        <input id="emailForOtp" placeholder="邮箱" />
+        <div class="row" style="margin-top:8px">
+          <button id="sendOtpBtn" class="btn">发送验证码</button>
+          <a id="choosePwd" class="link" href="#">选择密码登录</a>
+        </div>
+        <p class="small">发送后请到邮箱查看验证码，然后点击「我已收到验证码 → 验证」</p>
+        <a href="/verify.html" class="muted" style="display:inline-block;padding:8px;margin-top:6px;text-decoration:none">我已收到验证码 → 验证</a>
+      </div>
     </div>
   </div>
 
 <script>
-  document.getElementById('sendOtpBtn').addEventListener('click', async ()=>{
-    const email = document.getElementById('emailForOtp').value.trim();
-    if (!email) return alert('请输入邮箱');
-    document.getElementById('otpHint').textContent = '发送中...';
-    const res = await fetch('/api/send-otp', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email })});
-    if (!res.ok) { document.getElementById('otpHint').textContent='发送失败'; return; }
-    document.getElementById('otpHint').textContent='验证码已发送，请查看邮箱';
-  });
+  document.getElementById('chooseOtp').addEventListener('click', (e)=>{ e.preventDefault(); document.getElementById('pwdForm').style.display='none'; document.getElementById('otpForm').style.display='block'; });
+  document.getElementById('choosePwd').addEventListener('click', (e)=>{ e.preventDefault(); document.getElementById('pwdForm').style.display='block'; document.getElementById('otpForm').style.display='none'; });
 
   document.getElementById('pwdLoginBtn').addEventListener('click', async ()=>{
     const email = document.getElementById('emailLogin').value.trim();
     const pwd = document.getElementById('pwdLogin').value;
     if (!email || !pwd) return alert('请输入邮箱与密码');
     const res = await fetch('/api/login-password', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, password: pwd })});
-    if (!res.ok) { alert('登录失败'); return; }
+    if (!res.ok) { const j = await res.json().catch(()=>({})); return alert(j.error || '登录失败'); }
     location.href = '/';
   });
 
-  document.getElementById('setPwdBtn').addEventListener('click', async ()=>{
-    const newPwd = prompt('输入新密码（最少6位）');
-    if (!newPwd) return;
-    const oldPwd = prompt('若你已设过密码请输入旧密码 (没有可留空)');
-    const res = await fetch('/api/set-password', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ oldPassword: oldPwd, newPassword: newPwd })});
-    if (!res.ok) { alert('设置失败'); return; }
-    alert('设置成功');
-  });
-
-  document.getElementById('guestBtn').addEventListener('click', async ()=>{
-    const res = await fetch('/api/guest-create', { method:'POST' });
-    if (!res.ok) { alert('游客创建失败'); return; }
-    alert('游客模式已启用，今天最多可发 5 条');
-    location.href = '/';
+  document.getElementById('sendOtpBtn').addEventListener('click', async ()=>{
+    const email = document.getElementById('emailForOtp').value.trim();
+    if (!email) return alert('请输入邮箱');
+    const res = await fetch('/api/send-otp', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email })});
+    if (!res.ok) { const j=await res.json().catch(()=>({})); return alert(j.error || '发送失败'); }
+    alert('验证码已发送，请查看邮箱并在验证码页输入');
   });
 </script>
 </body>
