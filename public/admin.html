@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>后台管理</title>
+<style>
+  body{font-family:Arial;background:linear-gradient(180deg,#071026,#001021);color:#e6eef6;margin:0;padding:20px}
+  .wrap{max-width:1100px;margin:0 auto}
+  .card{background:rgba(255,255,255,0.02);padding:12px;border-radius:8px}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,0.03);text-align:left}
+  .btn{background:#06b6d4;color:#022;padding:6px 10px;border-radius:6px;border:none;cursor:pointer}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h2>后台管理</h2>
+    <div class="card">
+      <h3>用户列表</h3>
+      <div id="usersBox"></div>
+    </div>
+  </div>
+
+<script>
+  async function loadUsers() {
+    const res = await fetch('/api/admin/users', { credentials:'include' });
+    if (!res.ok) { alert('只有管理员能访问'); location.href='/'; return; }
+    const data = await res.json();
+    const box = document.getElementById('usersBox'); box.innerHTML='';
+    const table = document.createElement('table');
+    table.innerHTML = `<tr><th>邮箱</th><th>QQ</th><th>角色</th><th>封禁</th><th>操作</th></tr>`;
+    data.forEach(u=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${u.email}</td><td>${u.qq_id || ''} ${u.qq_name? ' / '+u.qq_name : ''}</td><td>${u.role}</td><td>${u.is_banned? '是':'否'}</td><td>
+        <button class="btn" onclick="ban('${u.id}')">封禁</button>
+        <button class="btn" onclick="unban('${u.id}')">解封</button>
+      </td>`;
+      table.appendChild(tr);
+    });
+    box.appendChild(table);
+  }
+
+  async function ban(id) {
+    if (!confirm('确定封禁？')) return;
+    await fetch('/api/admin/users', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'ban', user_id: id })});
+    loadUsers();
+  }
+  async function unban(id) {
+    await fetch('/api/admin/users', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'unban', user_id: id })});
+    loadUsers();
+  }
+
+  loadUsers();
+</script>
+</body>
+</html>

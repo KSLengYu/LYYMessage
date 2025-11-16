@@ -1,1 +1,193 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>留言板</title>
+  <style>
+    :root{
+      --bg:#071026; --card:#0b1220; --accent:#06b6d4;
+      --muted:#9ca3af; --text:#e6eef6; --glass: rgba(255,255,255,0.03);
+      font-family: "Segoe UI", Roboto, Arial;
+    }
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg),#001021);color:var(--text)}
+    .wrap{max-width:1000px;margin:28px auto;padding:20px}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+    .logo{font-weight:700;font-size:18px}
+    .userbox{display:flex;gap:12px;align-items:center}
+    .avatar{width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.03)}
+    .btn{background:var(--accent);color:#022;padding:8px 12px;border-radius:8px;text-decoration:none}
+    .layout{display:grid;grid-template-columns:1fr 320px;gap:18px}
+    .card{background:linear-gradient(180deg,var(--glass), rgba(0,0,0,0.06));padding:16px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
+    .composer textarea{width:100%;min-height:80px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--text)}
+    .row{display:flex;gap:8px;align-items:center}
+    .msg{display:flex;gap:12px;padding:12px;border-radius:10px;background:rgba(255,255,255,0.01);margin-bottom:12px}
+    .msg .body{flex:1}
+    .name{font-weight:700}
+    .qqsmall{opacity:0.6;font-size:12px;margin-left:8px}
+    .meta{font-size:12px;color:var(--muted);margin-top:6px}
+    .actions{margin-top:8px}
+    .reply-box{margin-left:60px;margin-top:8px}
+    .replies.collapsed{display:none}
+    .small{font-size:13px;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="logo">科技·留言板</div>
+      <div class="userbox">
+        <div id="userArea">
+          <a id="loginBtn" class="btn" href="/login.html">登录 / 注册</a>
+        </div>
+      </div>
+    </header>
 
+    <div class="layout">
+      <main class="card">
+        <div class="composer">
+          <textarea id="content" placeholder="写下你的留言..."></textarea>
+          <div class="row" style="margin-top:8px">
+            <button id="postBtn" class="btn">发表</button>
+            <button id="refreshBtn" class="btn" style="background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)">刷新</button>
+            <div style="flex:1"></div>
+            <div id="userStatus" class="small">未登录</div>
+          </div>
+        </div>
+
+        <hr style="border:none;height:12px" />
+        <div id="messages"></div>
+      </main>
+
+      <aside class="card">
+        <h4 style="margin-top:0">说明</h4>
+        <p class="small">登录后可发布评论，绑定 QQ 可显示头像与昵称。游客模式限制每天 5 条。</p>
+        <div style="margin-top:8px">
+          <a id="adminLink" href="/admin.html" class="small" style="color:var(--muted);display:none">后台管理</a>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    let CURRENT_USER_ID = null;
+    let IS_ADMIN = false;
+
+    function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/me', { credentials:'include' });
+        if (!res.ok) { document.getElementById('userStatus').textContent='未登录'; return; }
+        const u = await res.json();
+        CURRENT_USER_ID = u.id;
+        IS_ADMIN = u.role === 'admin';
+        document.getElementById('userStatus').textContent = u.qq_name || u.display_name || (u.email? u.email.split('@')[0] : '已登录');
+        document.getElementById('userArea').innerHTML = `<a href="/profile.html" style="display:flex;gap:8px;align-items:center;text-decoration:none;color:inherit"><img src="${u.qq_avatar||'/assets/default-avatar.png'}" class="avatar" onerror="this.src='/assets/default-avatar.png'"/><span style="margin-left:8px">${u.qq_name || u.display_name || (u.email?u.email.split('@')[0]:'用户')}</span></a>`;
+        if (IS_ADMIN) document.getElementById('adminLink').style.display='block';
+      } catch (e) { console.error(e); }
+    }
+
+    async function loadMessages() {
+      try {
+        const res = await fetch('/api/messages?limit=100');
+        if (!res.ok) throw new Error('load failed');
+        const data = await res.json();
+        const container = document.getElementById('messages'); container.innerHTML='';
+        if (!data || data.length===0) { container.innerHTML='<div class="small">暂无留言</div>'; return; }
+        data.forEach(m => {
+          const el = renderMessage(m);
+          container.appendChild(el);
+        });
+      } catch (e) {
+        console.error(e);
+        document.getElementById('messages').innerHTML='<div class="small">加载留言失败</div>';
+      }
+    }
+
+    function renderMessage(m) {
+      const div = document.createElement('div'); div.className='msg';
+      const avatar = m.qq_avatar || '/assets/default-avatar.png';
+      const name = m.qq_name || m.display_name || (m.email? m.email.split('@')[0] : '匿名');
+      const qqpart = m.qq_id ? `<span class="qqsmall">@${m.qq_id}</span>` : '';
+      const time = new Date(m.created_at).toLocaleString();
+      const iploc = m.ip_location ? `<span>${m.ip_location}</span>` : '';
+      const device = m.device ? `<span>${escapeHtml(m.device.split(')')[0]||m.device)}</span>` : '';
+      div.innerHTML = `
+        <img src="${avatar}" class="avatar" onerror="this.src='/assets/default-avatar.png'"/>
+        <div class="body">
+          <div><span class="name">${escapeHtml(name)}</span> ${qqpart} <span style="float:right;font-size:12px;color:#9aa">${time}</span></div>
+          <div style="margin-top:6px">${escapeHtml(m.content)}</div>
+          <div class="meta">${iploc} ${iploc && device ? ' · ' : ''} ${device}</div>
+          <div class="actions">
+            <button class="reply-btn" data-id="${m.id}">回复</button>
+            ${(CURRENT_USER_ID && m.user_id === CURRENT_USER_ID) ? `<button class="undo-btn" data-id="${m.id}">撤回</button>` : ''}
+            ${(IS_ADMIN) ? `<button class="admin-del" data-id="${m.id}">删除</button>` : ''}
+          </div>
+          <div class="reply-box" id="replies-${m.id}"></div>
+        </div>
+      `;
+      // reply button handler
+      setTimeout(()=>{
+        const rb = div.querySelector('.reply-btn');
+        if (rb) rb.addEventListener('click', ()=>openReplyBox(m.id));
+        const ub = div.querySelector('.undo-btn');
+        if (ub) ub.addEventListener('click', ()=>undoMessage(m.id));
+        const ad = div.querySelector('.admin-del');
+        if (ad) ad.addEventListener('click', ()=>adminDelete(m.id));
+      },0);
+      return div;
+    }
+
+    function openReplyBox(id) {
+      const container = document.getElementById('replies-'+id);
+      if (!container) return;
+      if (container.querySelector('textarea')) return;
+      container.innerHTML = `<textarea style="width:100%;min-height:60px" id="reply-to-${id}"></textarea><div style="margin-top:6px"><button class="btn" onclick="submitReply('${id}')">发布回复</button></div>`;
+    }
+
+    async function submitReply(parentId) {
+      const ta = document.getElementById('reply-to-'+parentId);
+      if (!ta) return;
+      const content = ta.value.trim();
+      if (!content) return alert('请输入内容');
+      const res = await fetch('/api/messages', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ content, parent_id: parentId })});
+      if (!res.ok) {
+        const j = await res.json().catch(()=>({error:'发布失败'}));
+        alert(j.error || '发布失败');
+        return;
+      }
+      await loadMessages();
+    }
+
+    async function undoMessage(id) {
+      if (!confirm('确定撤回该留言？撤回后仅可恢复。')) return;
+      const res = await fetch('/api/messages?action=undo&id='+id, { method:'PUT', credentials:'include' });
+      if (!res.ok) { alert('撤回失败'); return; }
+      await loadMessages();
+    }
+
+    async function adminDelete(id) {
+      if (!confirm('管理员：确定删除该留言？')) return;
+      const res = await fetch('/api/admin/messages', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'delete', message_id: id })});
+      if (!res.ok) { alert('删除失败'); return; }
+      await loadMessages();
+    }
+
+    document.getElementById('postBtn').addEventListener('click', async ()=>{
+      const content = document.getElementById('content').value.trim();
+      if (!content) return alert('请输入内容');
+      const res = await fetch('/api/messages', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ content })});
+      if (res.status === 401) { alert('请先登录或启用游客模式'); location.href='/login.html'; return; }
+      if (!res.ok) { const j=await res.json().catch(()=>({error:'发布失败'})); alert(j.error||'发布失败'); return; }
+      document.getElementById('content').value='';
+      await loadMessages();
+    });
+
+    document.getElementById('refreshBtn').addEventListener('click', loadMessages);
+
+    // on load
+    (async ()=>{ await checkAuth(); await loadMessages(); })();
+  </script>
+</body>
+</html>

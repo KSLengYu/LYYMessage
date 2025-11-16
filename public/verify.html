@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>验证验证码</title>
+  <style>
+    :root{--bg:#071026;--card:#0b1220;--accent:#06b6d4;--text:#e6eef6;--muted:#9ca3af}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg),#05111a);color:var(--text);font-family: "Segoe UI", Roboto, Arial;}
+    .wrap{max-width:640px;margin:60px auto;padding:20px;}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.04));padding:20px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.6)}
+    input{width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--text);margin-bottom:10px}
+    button{background:var(--accent);border:none;padding:10px 14px;border-radius:8px;color:#022;font-weight:700;cursor:pointer}
+    p.small{color:var(--muted);font-size:13px}
+    .muted{background:transparent;border:1px solid rgba(255,255,255,0.04);padding:8px;border-radius:8px;color:var(--muted)}
+    .row{display:flex;gap:8px;align-items:center}
+    .log{font-family:monospace;font-size:13px;color:#cfeef7;background:rgba(255,255,255,0.02);padding:10px;border-radius:8px;margin-top:12px;max-height:160px;overflow:auto}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h2 style="margin-top:0">输入验证码</h2>
+      <p class="small">打开你的邮箱，查看验证码（6 位数字），输入后我们会登录并跳回留言页。</p>
+
+      <input id="email" type="email" placeholder="用来接收验证码的邮箱" />
+      <input id="otp" type="text" placeholder="验证码（6 位）" />
+      <div class="row" style="margin-top:8px">
+        <button id="verifyBtn">验证并登录</button>
+        <button id="retryBtn" class="muted" style="display:none">重试</button>
+      </div>
+      <p id="hint" class="small" style="margin-top:10px"></p>
+
+      <div id="log" class="log" aria-live="polite" style="display:none"></div>
+    </div>
+  </div>
+
+  <script>
+    const verifyBtn = document.getElementById('verifyBtn');
+    const retryBtn = document.getElementById('retryBtn');
+    const hint = document.getElementById('hint');
+    const logBox = document.getElementById('log');
+
+    function showLog(msg) {
+      logBox.style.display = 'block';
+      const time = new Date().toLocaleTimeString();
+      logBox.innerHTML = `<div>[${time}] ${msg}</div>` + logBox.innerHTML;
+    }
+
+    async function doVerify() {
+      const email = document.getElementById('email').value.trim();
+      const otp = document.getElementById('otp').value.trim();
+      if (!email || !otp) { alert('请输入邮箱和验证码'); return; }
+
+      verifyBtn.disabled = true;
+      hint.textContent = '验证中...';
+      showLog(`请求 /api/verify-otp email=${email} otp=${otp}`);
+
+      try {
+        const res = await fetch('/api/verify-otp', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, otp })
+        });
+
+        const text = await res.text().catch(()=>null);
+        let body = null;
+        try { body = text ? JSON.parse(text) : null } catch(e){ body = { raw: text } }
+
+        showLog(`响应状态: ${res.status}`);
+        showLog(`响应 body: ${JSON.stringify(body)}`);
+
+        if (!res.ok) {
+          hint.textContent = body && body.error ? `验证失败: ${body.error}` : `验证失败（状态 ${res.status}）`;
+          retryBtn.style.display = 'inline-block';
+          verifyBtn.disabled = false;
+          return;
+        }
+
+        // 成功
+        hint.textContent = '验证通过，正在跳转...';
+        showLog('设置 cookie 完成（若浏览器接受 Set-Cookie）');
+        setTimeout(()=> location.href = '/', 700);
+      } catch (err) {
+        console.error('verify error', err);
+        showLog(`网络或服务器错误: ${err.message || err}`);
+        hint.textContent = '网络或服务器错误，请重试';
+        retryBtn.style.display = 'inline-block';
+        verifyBtn.disabled = false;
+      }
+    }
+
+    verifyBtn.addEventListener('click', doVerify);
+    retryBtn.addEventListener('click', ()=>{
+      retryBtn.style.display='none';
+      doVerify();
+    });
+  </script>
+</body>
+</html>
