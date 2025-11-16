@@ -17,6 +17,11 @@ export default async function handler(req, res) {
   const { oldPassword, newPassword } = req.body || {};
   if (!newPassword || newPassword.length < 6) return res.status(400).json({ error:'password too short' });
 
+  // 新增：限制密码只能包含字母和数字（至少6位）
+  if (!/^[A-Za-z0-9]{6,}$/.test(newPassword)) {
+    return res.status(400).json({ error:'password invalid (letters+digits only, min 6)' });
+  }
+
   try {
     const { data } = await supabase.from('users').select('password_hash').eq('id', payload.user_id).limit(1);
     const user = data && data[0];
