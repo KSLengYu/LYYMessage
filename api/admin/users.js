@@ -30,12 +30,21 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     const { action, user_id } = req.body || {};
     if (!action || !user_id) return res.status(400).json({ error:'missing' });
+
     if (action === 'ban') {
       const { error } = await supabase.from('users').update({ is_banned:true }).eq('id', user_id);
       if (error) return res.status(500).json({ error:'db error' });
       return res.status(200).json({ ok:true });
     } else if (action === 'unban') {
       const { error } = await supabase.from('users').update({ is_banned:false }).eq('id', user_id);
+      if (error) return res.status(500).json({ error:'db error' });
+      return res.status(200).json({ ok:true });
+    } else if (action === 'make_admin') {
+      const { error } = await supabase.from('users').update({ role: 'admin' }).eq('id', user_id);
+      if (error) return res.status(500).json({ error:'db error' });
+      return res.status(200).json({ ok:true });
+    } else if (action === 'remove_admin') {
+      const { error } = await supabase.from('users').update({ role: 'user' }).eq('id', user_id);
       if (error) return res.status(500).json({ error:'db error' });
       return res.status(200).json({ ok:true });
     } else {
