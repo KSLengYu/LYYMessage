@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>个人主页</title>
+<style>
+  body{font-family:Arial;background:linear-gradient(180deg,#071026,#001021);color:#e6eef6;margin:0;padding:30px}
+  .wrap{max-width:900px;margin:0 auto}
+  .card{background:rgba(255,255,255,0.02);padding:20px;border-radius:12px}
+  .avatar{width:80px;height:80px;border-radius:50%;object-fit:cover}
+  input{width:100%;padding:8px;margin-top:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+  .btn{background:#06b6d4;color:#022;padding:8px 12px;border-radius:8px;border:none;cursor:pointer}
+  .small{color:#9ca3af;font-size:13px}
+  .msg-row{padding:10px;border-bottom:1px solid rgba(255,255,255,0.03)}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div style="display:flex;gap:16px;align-items:center">
+        <img id="profileAvatar" class="avatar" src="/assets/default-avatar.png" alt="头像"/>
+        <div>
+          <h2 id="profileName">用户</h2>
+          <div id="profileEmail" class="small"></div>
+          <div style="margin-top:8px">
+            <button id="logoutBtn" class="btn">退出登录</button>
+            <button id="bindQBtn" class="btn" style="background:transparent;border:1px solid rgba(255,255,255,0.06);margin-left:8px">绑定 QQ</button>
+          </div>
+        </div>
+      </div>
+
+      <hr style="opacity:0.06;margin:16px 0"/>
+      <h3>我的留言</h3>
+      <div id="myMessages"></div>
+    </div>
+  </div>
+
+<script>
+  async function loadProfile() {
+    const res = await fetch('/api/me', { credentials:'include' });
+    if (!res.ok) { alert('未登录或会话失效'); location.href='/login.html'; return; }
+    const u = await res.json();
+    document.getElementById('profileAvatar').src = u.qq_avatar || '/assets/default-avatar.png';
+    document.getElementById('profileName').textContent = u.qq_name || u.display_name || (u.email?u.email.split('@')[0]:'用户');
+    document.getElementById('profileEmail').textContent = u.email || '';
+    loadMyMessages(u.id);
+  }
+
+  async function loadMyMessages(userId) {
+    const msgsRes = await fetch('/api/messages?limit=200');
+    if (!msgsRes.ok) { document.getElementById('myMessages').innerHTML = '<div class="small">加载失败</div>'; return; }
+    const all = await msgsRes.json();
+    const mine = all.filter(m => m.user_id === userId);
+    const box = document.getElementById('myMessages');
+    box.innerHTML = '';
+    if (mine.length === 0) { box.innerHTML = '<div class="small">你还没有发布过留言</div>'; return; }
+    mine.forEach(m => {
+      const d = document.createElement('div');
+      d.className = 'msg-row';
+      d.innerHTML = `<div style="font-size:13px;color:#9ca3af">${new Date(m.created_at).toLocaleString()}</div>
+                     <div style="margin-top:6px">${(m.content||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</div>`;
+      box.appendChild(d);
+    });
+  }
+
+  document.getElementById('logoutBtn').addEventListener('click', async ()=>{
+    await fetch('/api/logout', { method:'POST', credentials:'include' });
+    location.href = '/';
+  });
+
+  document.getElementById('bindQBtn').addEventListener('click', async ()=>{
+    const qq = prompt('请输入你的 QQ 号（纯数字）');
+    if (!qq) return;
+    const res = await fetch('/api/bind-qq', { method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ qq })});
+    if (!res.ok) { alert('绑定失败'); return; }
+    alert('绑定成功');
+    loadProfile();
+  });
+
+  loadProfile();
+</script>
+</body>
+</html>
